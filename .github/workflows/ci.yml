@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt ruff
+
+      - name: ruff
+        run: ruff check .
+
+      - name: feature engineering self-check
+        run: PYTHONPATH=. python tests/test_features.py
+
+      - name: train on a small synthetic sample (smoke test)
+        run: |
+          PYTHONPATH=. python -m training.generate_data --n-users 50 --tx-per-user 30 --out data/transactions.csv
+          PYTHONPATH=. python -m training.train --data data/transactions.csv --out models/model.joblib
+
+      - name: validate docker-compose.yml
+        run: docker compose config --quiet
