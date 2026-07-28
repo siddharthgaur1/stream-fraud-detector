@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import random
 import uuid
 from datetime import datetime, timedelta
@@ -76,6 +77,7 @@ def main() -> None:
     args = parser.parse_args()
 
     rows = generate(args.n_users, args.tx_per_user, args.fraud_rate, args.seed)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()

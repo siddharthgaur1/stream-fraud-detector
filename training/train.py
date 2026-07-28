@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBClassifier
 
-from common.config import MODEL_DIR, MODEL_PATH, MODEL_VERSION
+from common.config import MODEL_PATH, MODEL_VERSION
 from common.features import FEATURE_NAMES, compute_features, features_to_vector
 
 
@@ -83,6 +83,9 @@ def main() -> None:
     print("Ensemble AUC:", roc_auc_score(y_test, ensemble))
     print(classification_report(y_test, ensemble > 0.7))
 
+    out_dir = os.path.dirname(args.out) or "."
+    os.makedirs(out_dir, exist_ok=True)
+
     joblib.dump({
         "xgb": xgb,
         "iso": iso,
@@ -94,7 +97,9 @@ def main() -> None:
 
     # Reference distribution for the monitor service's drift comparison
     # (same two columns it reads back from production: amount, fraud_score).
-    reference_path = os.path.join(MODEL_DIR, "reference.csv")
+    # Written next to the model file, not MODEL_DIR — args.out may point
+    # somewhere else (e.g. CI uses a relative path).
+    reference_path = os.path.join(out_dir, "reference.csv")
     pd.DataFrame({
         "amount": X_test[:, FEATURE_NAMES.index("amount")],
         "fraud_score": ensemble,
