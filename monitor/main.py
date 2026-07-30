@@ -15,6 +15,7 @@ from evidently.report import Report
 
 from api import db
 from common.config import MODEL_DIR, REPORTS_DIR
+from monitor import ml_monitor_backend
 
 log = structlog.get_logger()
 
@@ -64,6 +65,13 @@ def run_once(reference: pd.DataFrame) -> None:
     }
     _atomic_write(os.path.join(REPORTS_DIR, "latest.json"), json.dumps(summary))
     log.info("monitor_report_written", **summary)
+
+    if ml_monitor_backend.ML_MONITOR_AVAILABLE:
+        try:
+            ml_report = ml_monitor_backend.run_once(reference, current)
+            _atomic_write(os.path.join(REPORTS_DIR, "ml_monitor_latest.json"), json.dumps(ml_report, default=str))
+        except Exception:
+            log.exception("ml_monitor_report_failed")
 
 
 def main() -> None:

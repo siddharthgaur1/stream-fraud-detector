@@ -102,3 +102,15 @@ def monitoring(format: str = "json"):
         raise HTTPException(status_code=404, detail="no report generated yet")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+@app.get("/monitoring/ml-monitor")
+def monitoring_ml_monitor():
+    """Second monitoring backend (sibling ml-monitor package), same report
+    cadence as /monitoring but its own per-feature KS/PSI + prediction-drift
+    view. 404 if ml-monitor isn't installed or hasn't produced a report yet."""
+    path = os.path.join(REPORTS_DIR, "ml_monitor_latest.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="no ml-monitor report generated yet (is ml-monitor installed?)")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)

@@ -159,6 +159,20 @@ curl http://localhost:8000/monitoring?format=html # full Evidently report
 {"generated_at": 1785251258.42, "rows_compared": 163, "dataset_drift": false, "drift_share": 0.5, "current_fraud_rate": 0.0429, "current_avg_score": 0.13}
 ```
 
+### `GET /monitoring/ml-monitor`
+
+Second, optional monitoring backend: the sibling
+[ml-monitor](https://github.com/siddharthgaur1/ml-monitor) package, run
+alongside Evidently on the same timer (`monitor/ml_monitor_backend.py`),
+giving KS/PSI drift on `amount`/`is_fraud` plus PSI-based prediction drift
+on `fraud_score`. Not a hard dependency — `pip install -e ../ml-monitor` to
+enable it; without it, `monitor/main.py` silently skips this second report
+and `/monitoring/ml-monitor` 404s.
+
+```bash
+curl http://localhost:8000/monitoring/ml-monitor
+```
+
 ## Local development (no Docker)
 
 ```bash
