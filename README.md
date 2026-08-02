@@ -207,9 +207,26 @@ locust -f loadtest/locustfile.py --host http://localhost:8000 \
 
 Generates `/score` requests with the same field ranges as `producer/stream.py`'s
 synthetic traffic (see `common/features.MERCHANT_CATEGORIES` etc.), against
-the running `docker compose up -d` stack. No numbers are hardcoded here —
-run it against your own machine and paste the `--csv` summary or the web UI's
-percentiles; a number pulled from someone else's hardware isn't a real result.
+the running `docker compose up -d` stack.
+
+**Measured run** (50 users, ramped 10/s, 60s, 12-core host, full `docker compose`
+stack including the producer's background traffic):
+
+| Metric | Value |
+|---|---|
+| Requests | 1733, 0 failures |
+| Throughput | 29.7 req/s |
+| Median latency | 1400 ms |
+| p95 / p99 | 2300 ms / 2700 ms |
+| Min / Max | 22 ms / 3146 ms |
+
+The min (22 ms) matches the single-request example above — the model itself
+is fast. The gap to the median under load is `uvicorn api.main:app` running
+with no `--workers` flag (see `docker-compose.yml`): one Python process
+serializes every request, so 50 concurrent clients queue behind each other
+rather than run in parallel. Numbers are from this machine, not a claimed
+production SLA — rerun `--csv loadtest/results` on your own hardware before
+citing a number anywhere that matters.
 
 ## Project structure
 

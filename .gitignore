@@ -7,3 +7,4 @@ models/*.csv
 reports/*.html
 reports/*.json
 .ipynb_checkpoints/
+loadtest/results*
