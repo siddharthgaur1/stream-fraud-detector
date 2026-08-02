@@ -194,6 +194,23 @@ Running `api`/`producer`/`monitor` outside Docker additionally needs a local
 Kafka-compatible broker, Redis and Postgres reachable at the URLs in
 `.env.example`.
 
+## Load testing
+
+```bash
+pip install -r loadtest/requirements.txt
+locust -f loadtest/locustfile.py --host http://localhost:8000
+
+# or headless, for a fixed number to drop in a report:
+locust -f loadtest/locustfile.py --host http://localhost:8000 \
+    --headless -u 50 -r 10 -t 60s --csv loadtest/results
+```
+
+Generates `/score` requests with the same field ranges as `producer/stream.py`'s
+synthetic traffic (see `common/features.MERCHANT_CATEGORIES` etc.), against
+the running `docker compose up -d` stack. No numbers are hardcoded here —
+run it against your own machine and paste the `--csv` summary or the web UI's
+percentiles; a number pulled from someone else's hardware isn't a real result.
+
 ## Project structure
 
 ```
@@ -205,6 +222,7 @@ monitor/    Evidently drift/performance reports on a timer
 training/   offline data generation + model training (source of models/model.joblib)
 notebooks/  training.ipynb — EDA/ROC/feature-importance/SHAP, reuses training/*
 tests/      feature engineering self-check
+loadtest/   locust load test for POST /score
 ```
 
 ## License
