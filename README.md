@@ -194,7 +194,7 @@ Running `api`/`producer`/`monitor` outside Docker additionally needs a local
 Kafka-compatible broker, Redis and Postgres reachable at the URLs in
 `.env.example`.
 
-## Load testing
+## Results (load test)
 
 ```bash
 pip install -r loadtest/requirements.txt
@@ -246,7 +246,7 @@ loadtest/   locust load test for POST /score
 
 MIT — see [LICENSE](LICENSE).
 
-## Notes / known limits
+## Limitations
 
 - Single shared `Dockerfile` for producer/scorer/monitor — same deps, only
   the compose `command:` differs. Simplest thing that works for 3 small
