@@ -69,7 +69,9 @@ def run_once(reference: pd.DataFrame) -> None:
     if ml_monitor_backend.ML_MONITOR_AVAILABLE:
         try:
             ml_report = ml_monitor_backend.run_once(reference, current)
-            _atomic_write(os.path.join(REPORTS_DIR, "ml_monitor_latest.json"), json.dumps(ml_report, default=str))
+            _atomic_write(
+                os.path.join(REPORTS_DIR, "ml_monitor_latest.json"), json.dumps(ml_report, default=str)
+            )
         except Exception:
             log.exception("ml_monitor_report_failed")
 

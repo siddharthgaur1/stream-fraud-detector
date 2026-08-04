@@ -8,9 +8,8 @@ writing its report, leaving the Evidently pipeline as the sole monitor.
 """
 from __future__ import annotations
 
-import structlog
-
 import pandas as pd
+import structlog
 
 log = structlog.get_logger()
 
