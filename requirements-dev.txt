@@ -1,0 +1,11 @@
+-r requirements.txt
+
+pytest>=8.0
+ruff>=0.6
+locust>=2.24
+httpx>=0.27          # fastapi.testclient
+
+# MLflow is optional at runtime — the scorer falls back to the local joblib
+# bundle when MLFLOW_TRACKING_URI is unset — so it is not in requirements.txt.
+# It is needed to run training with --register or to promote a model.
+mlflow>=2.14

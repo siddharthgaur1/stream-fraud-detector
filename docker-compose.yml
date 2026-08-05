@@ -1,3 +1,22 @@
+# Local development stack. Credentials here are throwaway and the ports are
+# published to localhost for convenience — see README "Notes / known limits".
+#
+# `x-app-*` anchors keep the three application services from drifting apart:
+# they run the same image and must agree on how they reach Redis/Postgres.
+x-app-build: &app-build
+  build: .
+  restart: unless-stopped
+
+x-backends: &backends
+  REDIS_URL: redis://redis:6379/0
+  POSTGRES_DSN: postgresql://fraud:fraud@postgres:5432/fraud
+  MODEL_DIR: /models
+  REPORTS_DIR: /reports
+  # Unset by default -> the scorer loads models/model.joblib. Point this at an
+  # MLflow server to serve whatever is promoted to MODEL_REGISTRY_STAGE.
+  MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-}
+  MODEL_REGISTRY_STAGE: ${MODEL_REGISTRY_STAGE:-Production}
+
 services:
   redpanda:
     image: redpandadata/redpanda:v24.1.1
@@ -17,8 +36,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    # maxmemory + LRU so a runaway key space degrades into evictions rather
+    # than an OOM kill that takes scoring down with it. The feature store also
+    # sets a TTL per user (REDIS_HISTORY_TTL_SEC); this is the backstop.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   postgres:
     image: postgres:16-alpine
@@ -37,25 +65,29 @@ services:
       timeout: 5s
       retries: 10
 
-  # One-off: `docker compose run --rm trainer` before first `docker compose up`.
+  # One-off: `make train` (or `docker compose run --rm trainer`) before the
+  # first `docker compose up`.
   trainer:
     build: .
     profiles: ["tools"]
     command: sh -c "python -m training.generate_data && python -m training.train"
+    environment:
+      <<: *backends
     volumes:
       - ./models:/models
       - ./data:/app/data
 
   producer:
-    build: .
+    <<: *app-build
     command: python -m producer.main
     depends_on:
-      - redpanda
+      redpanda:
+        condition: service_healthy
     environment:
       KAFKA_BROKERS: redpanda:9092
 
   scorer:
-    build: .
+    <<: *app-build
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
@@ -63,29 +95,41 @@ services:
       redpanda:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
+      <<: *backends
       KAFKA_BROKERS: redpanda:9092
-      REDIS_URL: redis://redis:6379/0
-      POSTGRES_DSN: postgresql://fraud:fraud@postgres:5432/fraud
-      MODEL_DIR: /models
-      REPORTS_DIR: /reports
+      # No default: the app refuses to start without either API_KEYS or an
+      # explicit ALLOW_UNAUTHENTICATED=true. `make up` sets a dev key.
+      API_KEYS: ${API_KEYS:-}
+      ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED:-}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-600}
     volumes:
       - ./models:/models:ro
       - ./reports:/reports
+    healthcheck:
+      # /health returns 503 when Redis or Postgres is unreachable, so this
+      # actually reflects the service being able to do its job.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   monitor:
-    build: .
+    <<: *app-build
     command: python -m monitor.main
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      POSTGRES_DSN: postgresql://fraud:fraud@postgres:5432/fraud
-      MODEL_DIR: /models
-      REPORTS_DIR: /reports
+      <<: *backends
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      DRIFT_SHARE_THRESHOLD: ${DRIFT_SHARE_THRESHOLD:-0.5}
+      DRIFT_CONSECUTIVE_WINDOWS: ${DRIFT_CONSECUTIVE_WINDOWS:-2}
+      MONITOR_INTERVAL_SEC: ${MONITOR_INTERVAL_SEC:-60}
     volumes:
       - ./models:/models:ro
       - ./reports:/reports

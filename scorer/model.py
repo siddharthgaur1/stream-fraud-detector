@@ -7,7 +7,8 @@ import numpy as np
 import shap
 import structlog
 
-from common.config import FRAUD_SCORE_THRESHOLD, MODEL_PATH, XGB_WEIGHT
+from common import registry
+from common.config import FRAUD_SCORE_THRESHOLD, XGB_WEIGHT
 from common.features import FEATURE_NAMES, compute_features, features_to_vector
 from scorer.redis_store import RedisFeatureStore
 
@@ -17,18 +18,22 @@ TOP_K_SHAP = 5
 
 
 class FraudScorer:
-    def __init__(self, model_path: str = MODEL_PATH):
-        import joblib
-        # trusted artifact: produced by training/train.py in this repo, not external input
-        bundle = joblib.load(model_path)
+    def __init__(self):
+        # Source is the registry stage when MLflow is configured, else the
+        # local joblib file. See common/registry.py.
+        bundle, version, source = registry.load_bundle()
+        self.version = version
+        self.source = source
         self.xgb = bundle["xgb"]
         self.iso = bundle["iso"]
         self.iso_scaler = bundle["iso_scaler"]
         self.feature_names = bundle["feature_names"]
-        self.version = bundle["version"]
+        self.xgb_weight = bundle.get("xgb_weight", XGB_WEIGHT)
+        self.threshold = bundle.get("threshold", FRAUD_SCORE_THRESHOLD)
         self._shap_explainer = shap.TreeExplainer(self.xgb)
         self.store = RedisFeatureStore()
-        log.info("model_loaded", version=self.version, path=model_path)
+        log.info("model_loaded", version=self.version, source=source,
+                 xgb_weight=self.xgb_weight, threshold=self.threshold)
 
     def score(self, tx: dict) -> dict:
         prior_amounts, prior_devices = self.store.get_history(tx["user_id"])
@@ -46,7 +51,11 @@ class FraudScorer:
         xgb_proba = float(self.xgb.predict_proba(vector)[0, 1])
         iso_raw = -self.iso.score_samples(vector)
         iso_score = float(self.iso_scaler.transform(iso_raw.reshape(-1, 1))[0, 0])
-        fraud_score = XGB_WEIGHT * xgb_proba + (1 - XGB_WEIGHT) * iso_score
+        # Weight and threshold come from the bundle, not the environment. They
+        # were baked in at training time and the drift reference distribution
+        # was computed with them; letting a deploy-time env var override them
+        # silently invalidates every drift comparison against that reference.
+        fraud_score = self.xgb_weight * xgb_proba + (1 - self.xgb_weight) * iso_score
 
         shap_values = self._shap_explainer.shap_values(vector)[0]
         ranked = sorted(zip(FEATURE_NAMES, shap_values), key=lambda kv: abs(kv[1]), reverse=True)
@@ -58,6 +67,6 @@ class FraudScorer:
 
         return {
             "fraud_score": round(fraud_score, 4),
-            "is_fraud": fraud_score >= FRAUD_SCORE_THRESHOLD,
+            "is_fraud": fraud_score >= self.threshold,
             "shap_explanation": shap_explanation,
         }

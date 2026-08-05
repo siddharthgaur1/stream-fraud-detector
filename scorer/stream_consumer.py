@@ -14,6 +14,7 @@ import structlog
 from kafka import KafkaConsumer
 from kafka.errors import NoBrokersAvailable
 
+from api import metrics
 from common.config import KAFKA_BROKERS, KAFKA_TOPIC
 
 log = structlog.get_logger()
@@ -35,7 +36,7 @@ def _connect(retries: int = 30, delay: float = 2.0) -> KafkaConsumer:
     raise RuntimeError(f"could not connect to Kafka at {KAFKA_BROKERS}")
 
 
-def run_stream_consumer(scorer, insert_score, stop_event: threading.Event) -> None:
+def run_stream_consumer(scorer, insert_score, stop_event: threading.Event, on_message=None) -> None:
     consumer = _connect()
     log.info("stream_consumer_started", topic=KAFKA_TOPIC)
     try:
@@ -44,8 +45,13 @@ def run_stream_consumer(scorer, insert_score, stop_event: threading.Event) -> No
             for records in batch.values():
                 for record in records:
                     tx = record.value
+                    started = time.perf_counter()
                     try:
                         result = scorer.score(tx)
+                        metrics.SCORE_LATENCY.labels(source="stream").observe(time.perf_counter() - started)
+                        metrics.SCORE_REQUESTS.labels(source="stream", outcome="ok").inc()
+                        if result["is_fraud"]:
+                            metrics.FRAUD_FLAGGED.labels(source="stream").inc()
                         insert_score({
                             "transaction_id": tx["transaction_id"],
                             "user_id": tx["user_id"],
@@ -54,16 +60,21 @@ def run_stream_consumer(scorer, insert_score, stop_event: threading.Event) -> No
                             **result,
                         })
                     except Exception:
+                        metrics.SCORE_REQUESTS.labels(source="stream", outcome="error").inc()
                         log.exception("stream_scoring_failed", transaction_id=tx.get("transaction_id"))
+                    if on_message is not None:
+                        on_message()
     finally:
         consumer.close()
         log.info("stream_consumer_stopped")
 
 
-def start_stream_consumer_thread(scorer, insert_score) -> tuple[threading.Thread, threading.Event]:
+def start_stream_consumer_thread(
+    scorer, insert_score, on_message=None
+) -> tuple[threading.Thread, threading.Event]:
     stop_event = threading.Event()
     thread = threading.Thread(
-        target=run_stream_consumer, args=(scorer, insert_score, stop_event), daemon=True
+        target=run_stream_consumer, args=(scorer, insert_score, stop_event, on_message), daemon=True
     )
     thread.start()
     return thread, stop_event
