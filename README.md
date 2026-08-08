@@ -1,3 +1,19 @@
+> **Superseded — merged into
+> [github.com/siddharthgaur1/ml-monitor](https://github.com/siddharthgaur1/ml-monitor)
+> as the `ml_platform.fraud` subsystem.**
+>
+> This repository is archived and read-only. Its full commit history was carried
+> over with `git subtree`, so nothing here is lost — the commits live in the
+> flagship's history with their original dates.
+>
+> The merge removed a `try/except ImportError` around `import ml_monitor` that
+> let a whole monitoring backend silently no-op when the sibling package was
+> absent. Inside one package it is always present, so a failure there is now a
+> real failure.
+>
+> The caveats below still hold and are repeated in the flagship's README: the
+> transaction data is synthetic, and the service is not deployed anywhere.
+
 # stream-fraud-detector
 
 [![CI](https://github.com/siddharthgaur1/stream-fraud-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/siddharthgaur1/stream-fraud-detector/actions/workflows/ci.yml)
